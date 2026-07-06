@@ -1,0 +1,43 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  imageRepository: 'flaskapp'
+  containerRegistry: 'rahulacr2026'
+  dockerfilePath: 'Dockerfile'
+  tag: '$(Build.BuildId)'
+
+steps:
+- task: Docker@2
+  displayName: Build Image
+  inputs:
+    command: build
+    repository: $(imageRepository)
+    dockerfile: $(dockerfilePath)
+    containerRegistry: $(containerRegistry)
+    tags: |
+      $(tag)
+
+- task: Docker@2
+  displayName: Push Image
+  inputs:
+    command: push
+    repository: $(imageRepository)
+    containerRegistry: $(containerRegistry)
+    tags: |
+      $(tag)
+
+- task: KubernetesManifest@1
+  displayName: Deploy to AKS
+  inputs:
+    action: deploy
+    kubernetesServiceConnection: AKSConnection
+    namespace: default
+    manifests: |
+      deployment.yaml
+      service.yaml
+    containers: |
+      rahulacr2026.azurecr.io/flaskapp:$(tag)
