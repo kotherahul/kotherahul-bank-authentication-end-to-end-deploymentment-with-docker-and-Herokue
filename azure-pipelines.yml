@@ -14,6 +14,11 @@ variables:
 
 steps:
 
+# Install kubectl
+- task: KubectlInstaller@0
+  displayName: Install kubectl
+
+# Login to Azure and ACR
 - task: AzureCLI@2
   displayName: Login to Azure
   inputs:
@@ -24,14 +29,19 @@ steps:
       az account show
       az acr login --name $(acrName)
 
+# Build Docker Image
 - script: |
-    docker build -t $(acrName).azurecr.io/$(imageName):$(tag) .
+    docker build \
+      -t $(acrName).azurecr.io/$(imageName):$(tag) .
   displayName: Build Docker Image
 
+# Push Docker Image
 - script: |
-    docker push $(acrName).azurecr.io/$(imageName):$(tag)
+    docker push \
+      $(acrName).azurecr.io/$(imageName):$(tag)
   displayName: Push Docker Image
 
+# Deploy to AKS
 - task: AzureCLI@2
   displayName: Deploy to AKS
   inputs:
@@ -41,12 +51,11 @@ steps:
     inlineScript: |
 
       az aks get-credentials \
-      --resource-group $(resourceGroup) \
-      --name $(aksCluster) \
-      --overwrite-existing
+        --resource-group $(resourceGroup) \
+        --name $(aksCluster) \
+        --overwrite-existing
 
       kubectl apply -f deployment.yaml
-
       kubectl apply -f service.yaml
 
       kubectl set image deployment/flask-app \
