@@ -2,42 +2,58 @@ trigger:
 - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: ubuntu-latest
 
 variables:
-  imageRepository: 'flaskapp'
-  containerRegistry: 'rahulacr2026'
-  dockerfilePath: 'Dockerfile'
-  tag: '$(Build.BuildId)'
+  azureSubscription: demo-rahul
+  resourceGroup: myapp-rg
+  aksCluster: myapp
+  acrName: rahulacr2026
+  imageName: flaskapp
+  tag: $(Build.BuildId)
 
 steps:
-- task: Docker@2
-  displayName: Build Image
-  inputs:
-    command: build
-    repository: $(imageRepository)
-    dockerfile: $(dockerfilePath)
-    containerRegistry: $(containerRegistry)
-    tags: |
-      $(tag)
 
-- task: Docker@2
-  displayName: Push Image
+- task: AzureCLI@2
+  displayName: Login to Azure
   inputs:
-    command: push
-    repository: $(imageRepository)
-    containerRegistry: $(containerRegistry)
-    tags: |
-      $(tag)
+    azureSubscription: $(azureSubscription)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az account show
+      az acr login --name $(acrName)
 
-- task: KubernetesManifest@1
+- script: |
+    docker build -t $(acrName).azurecr.io/$(imageName):$(tag) .
+  displayName: Build Docker Image
+
+- script: |
+    docker push $(acrName).azurecr.io/$(imageName):$(tag)
+  displayName: Push Docker Image
+
+- task: AzureCLI@2
   displayName: Deploy to AKS
   inputs:
-    action: deploy
-    kubernetesServiceConnection: AKSConnection
-    namespace: default
-    manifests: |
-      deployment.yaml
-      service.yaml
-    containers: |
-      rahulacr2026.azurecr.io/flaskapp:$(tag)
+    azureSubscription: $(azureSubscription)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+
+      az aks get-credentials \
+      --resource-group $(resourceGroup) \
+      --name $(aksCluster) \
+      --overwrite-existing
+
+      kubectl apply -f deployment.yaml
+
+      kubectl apply -f service.yaml
+
+      kubectl set image deployment/flask-app \
+      flask-app=$(acrName).azurecr.io/$(imageName):$(tag)
+
+      kubectl rollout status deployment/flask-app
+
+      kubectl get pods
+
+      kubectl get svc
